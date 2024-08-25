@@ -59,8 +59,8 @@ void cons_put_char(char c) {
 
     if (c == '\r') {
         if (++term_pos_row >= 27) {
-            term_pos_row = 3 ;
-            // clrScr(0) ;
+            term_pos_row = 26 ;
+            cons_scroll() ;
         }
         return ;
     }
@@ -75,14 +75,14 @@ void cons_put_char(char c) {
     if (term_pos_col >= TEXTMODE_COLS) {
         term_pos_col = 0 ;
         if (++term_pos_row >= 27) {
-            term_pos_row = 3 ;
-            // clrScr(0) ;
+            term_pos_row = 26 ;
+            cons_scroll() ;
         }
     }
 
     uint8_t* t_buf = text_buffer + TEXTMODE_COLS * 2 * term_pos_row + 2 * term_pos_col ;
     *t_buf++ = c;
-    *t_buf++ = 0 << 4 | 6 & 0xF;
+    *t_buf++ = 0 << 4 | 7 & 0xF;
 
     term_pos_col++ ;
 }
@@ -100,4 +100,15 @@ void cons_draw_line(const char* title, uint32_t row) {
 
     snprintf(line, TEXTMODE_COLS, " %s ", title);
     draw_text(line, (TEXTMODE_COLS - strlen(line)) / 2, row, 2, 0);
+}
+
+uint8_t cons_buffer[TEXTMODE_COLS * 24 * 2] ;
+
+void cons_init() {
+    memset(&cons_buffer[TEXTMODE_COLS * 23 * 2], 0, TEXTMODE_COLS * 2) ;
+}
+
+void cons_scroll() {
+    memcpy(cons_buffer, &text_buffer[TEXTMODE_COLS * 4 * 2], TEXTMODE_COLS * 23 * 2) ;
+    memcpy(&text_buffer[TEXTMODE_COLS * 3 * 2], cons_buffer, TEXTMODE_COLS * 24 * 2) ;
 }

@@ -17,7 +17,7 @@ extern "C" {
 int startup( char *rkfile, char *rlfile, int bootdev) ;
 
 static FATFS fs ;
-uint16_t SCREEN[TEXTMODE_ROWS][TEXTMODE_COLS] ;
+uint16_t SCREEN[TEXTMODE_ROWS * TEXTMODE_COLS] ;
 semaphore vga_start_semaphore ;
 
 constexpr char BASEDIR[] = "PDP-11" ;
@@ -27,14 +27,11 @@ constexpr char BASEDIR[] = "PDP-11" ;
 void __time_critical_func(render_core)() {
     multicore_lockout_victim_init();
     graphics_init();
-
-    const auto buffer = (uint8_t *)SCREEN;
-
     graphics_set_bgcolor(0x000000);
     graphics_set_offset(0, 0);
     graphics_set_mode(TEXTMODE_DEFAULT);
-    graphics_set_buffer(buffer, TEXTMODE_COLS, TEXTMODE_ROWS);
-    graphics_set_textbuffer(buffer);
+    graphics_set_buffer((uint8_t *) SCREEN, TEXTMODE_COLS, TEXTMODE_ROWS);
+    graphics_set_textbuffer((uint8_t *) SCREEN);
     clrScr(1);
 
     sem_acquire_blocking(&vga_start_semaphore);
@@ -42,7 +39,7 @@ void __time_critical_func(render_core)() {
     uint64_t tick = time_us_64();
     uint64_t last_input_tick = tick;
     while (true) {
-        // Every 5th frame
+        // Every 60th frame
         if (tick >= last_input_tick + frame_tick * 60) {
             gpio_put(PICO_DEFAULT_LED_PIN, !gpio_get(PICO_DEFAULT_LED_PIN));
             last_input_tick = tick;
@@ -84,6 +81,8 @@ int main() {
     sem_release(&vga_start_semaphore);
     
     sleep_ms(250) ;
+
+    cons_init() ;
 
     cons_draw_line("Murmulator PDP-11", 2) ;
     cons_draw_line(nullptr, 27) ;
