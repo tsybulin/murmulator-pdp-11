@@ -6,6 +6,11 @@
 #include "kb11.h"
 #include "kl11.h"
 #include "graphics.h"
+
+extern "C" {
+#include "cons.h"
+}
+
 #include <stdio.h>
 #include "pico/stdlib.h"
 

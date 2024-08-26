@@ -58,11 +58,9 @@ void draw_window(const char title[TEXTMODE_COLS + 1], uint32_t x, uint32_t y, ui
 
 void clrScr(uint8_t color);
 
-void gprintf(const char *__restrict, ...) ;
-void cons_init() ;
-void cons_put_char(char c) ;
-void cons_draw_line(const char* title, uint32_t row) ;
-void cons_scroll() ;
+void lgprintf(uint32_t x, uint32_t y, uint8_t color, uint8_t bgcolor, const char *__restrict format, ...) ;
+
+#define gprintf(...) lgprintf (0, 28, 12, 0, __VA_ARGS__)
 
 #ifdef __cplusplus
 }

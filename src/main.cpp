@@ -12,6 +12,7 @@
 
 extern "C" {
 #include "ps2.h"
+#include "cons.h"
 }
 
 int startup( char *rkfile, char *rlfile, int bootdev) ;
@@ -52,21 +53,8 @@ void __time_critical_func(render_core)() {
     __unreachable();
 }
 
-char keyboard_input  ;
-
-extern "C" {
-bool __time_critical_func(handleScancode)(const uint32_t ps2scancode) {
-    if (ps2scancode) {
-        keyboard_input = xt_to_char(ps2scancode) ;
-    }
-
-    return true;
-}
-}
-
 int main() {
     set_sys_clock_khz(200000, true) ;
-    keyboard_init() ;
     busy_wait_ms(1000) ;
 
     stdio_uart_init_full(PIN_UART_ID, 115200, PIN_UART_TX, PIN_UART_RX) ;
@@ -103,6 +91,7 @@ int main() {
     char rlfile[] = "PDP-11/WORK.RL02" ;
 
     startup(rkfile, rlfile, 0) ;
+    // while(1) ;
     
     __unreachable() ;
 }

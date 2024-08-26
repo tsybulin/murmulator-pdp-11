@@ -5,7 +5,7 @@ project(murm-pdp C CXX ASM)
 pico_sdk_init()
 
 option(VGA "Enable VGA" ON)
-set(APP_VERSION 11.01)
+set(APP_VERSION 11.02)
 
 SET(BUILD_NAME "${PROJECT_NAME}-${APP_VERSION}")
 
@@ -28,6 +28,7 @@ add_subdirectory(drivers/sdcard)
 add_subdirectory(drivers/fatfs)
 add_subdirectory(drivers/ps2)
 
+add_subdirectory(cons)
 add_subdirectory(pdp11)
 
 file(GLOB_RECURSE SRC "src/*.cpp" "src/*.c")
@@ -44,7 +45,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/s
 pico_set_program_name(${PROJECT_NAME} "Murmulator PDP11")
 pico_set_program_version(${PROJECT_NAME} "test")
 
-target_link_libraries(${PROJECT_NAME} PRIVATE graphics sdcard fatfs ps2 pdp11 pico_stdlib hardware_pio pico_multicore)
+target_link_libraries(${PROJECT_NAME} PRIVATE graphics sdcard fatfs ps2 cons pdp11 pico_stdlib hardware_pio pico_multicore)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
