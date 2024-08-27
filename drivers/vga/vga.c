@@ -43,7 +43,10 @@ static int dma_chan_ctrl;
 static int dma_chan;
 
 static uint8_t* graphics_buffer;
-uint8_t* text_buffer = NULL;
+
+uint8_t* char_buffer = NULL;
+uint8_t* attr_buffer = NULL;
+
 static uint graphics_buffer_width = 0;
 static uint graphics_buffer_height = 0;
 static int graphics_buffer_shift_x = 0;
@@ -135,13 +138,14 @@ void __time_critical_func() dma_handler_VGA() {
             uint32_t glyph_line = screen_line % font_height;
 
             //указатель откуда начать считывать символы
-            uint8_t* text_buffer_line = &text_buffer[screen_line / font_height * text_buffer_width * 2];
+            uint8_t* char_buffer_line = &char_buffer[screen_line / font_height * text_buffer_width];
+            uint8_t* attr_buffer_line = &attr_buffer[screen_line / font_height * text_buffer_width];
 
             for (int x = 0; x < text_buffer_width; x++) {
                 //из таблицы символов получаем "срез" текущего символа
-                uint8_t glyph_pixels = font_8x16[*text_buffer_line++ * font_height + glyph_line];
+                uint8_t glyph_pixels = font_8x16[*char_buffer_line++ * font_height + glyph_line];
                 //считываем из быстрой палитры начало таблицы быстрого преобразования 2-битных комбинаций цветов пикселей
-                uint16_t* color = &txt_palette_fast[*text_buffer_line++ * 4];
+                uint16_t* color = &txt_palette_fast[*attr_buffer_line++ * 4];
 #if 0
                 if (cursor_blink_state && !manager_started &&
                     (screen_line / 16 == CURSOR_Y && x == CURSOR_X && glyph_line >= 11 && glyph_line <= 13)) {
@@ -426,8 +430,9 @@ void graphics_set_flashmode(const bool flash_line, const bool flash_frame) {
     is_flash_line = flash_line;
 }
 
-void graphics_set_textbuffer(uint8_t* buffer) {
-    text_buffer = buffer;
+void graphics_set_textbuffer(uint8_t* char_buff, uint8_t* attr_buff) {
+    char_buffer = char_buff;
+    attr_buffer = attr_buff;
 }
 
 void graphics_set_bgcolor(const uint32_t color888) {
@@ -571,8 +576,6 @@ void graphics_init() {
 
 
 void clrScr(const uint8_t color) {
-    uint16_t* t_buf = (uint16_t *)text_buffer;
-    int size = TEXTMODE_COLS * TEXTMODE_ROWS;
-
-    while (size--) *t_buf++ = color << 4 | ' ';
+    memset(char_buffer, ' ', TEXTMODE_COLS * TEXTMODE_ROWS) ;
+    memset(attr_buffer, color << 4, TEXTMODE_COLS * TEXTMODE_ROWS) ;
 }

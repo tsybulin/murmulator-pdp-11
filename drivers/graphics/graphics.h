@@ -35,7 +35,8 @@ enum graphics_mode_t {
 };
 
 // Буффер текстового режима
-extern uint8_t* text_buffer;
+extern uint8_t* char_buffer;
+extern uint8_t* attr_buffer;
 
 void graphics_init();
 
@@ -47,7 +48,7 @@ void graphics_set_offset(int x, int y);
 
 void graphics_set_palette(uint8_t i, uint32_t color);
 
-void graphics_set_textbuffer(uint8_t* buffer);
+void graphics_set_textbuffer(uint8_t* char_buff, uint8_t* attr_buff);
 
 void graphics_set_bgcolor(uint32_t color888);
 
