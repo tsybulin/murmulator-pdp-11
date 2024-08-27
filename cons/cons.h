@@ -7,5 +7,6 @@ void cons_init() ;
 void cons_put_char(char c) ;
 void cons_draw_line(const char* title, uint32_t row) ;
 void cons_scroll() ;
+void cons_printf(const char *__restrict format, ...) ;
 
 #endif

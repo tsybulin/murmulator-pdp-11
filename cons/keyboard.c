@@ -116,6 +116,16 @@ uint8_t keyboard_map_key_ascii(uint8_t key, uint8_t modifier, bool *isaltcode) {
         altcodecount = 0 ;
     }
 
+    if (!modifier) {
+        if (key == HID_KEY_CAPS_LOCK) {
+            keyboard_led_status ^= KEYBOARD_LED_CAPSLOCK ;
+        } else if (key == HID_KEY_NUM_LOCK) {
+            keyboard_led_status ^= KEYBOARD_LED_NUMLOCK ;
+        } else if (key == HID_KEY_SCROLL_LOCK) {
+            keyboard_led_status ^= KEYBOARD_LED_SCROLLLOCK ;
+        }
+    }
+
     if (modifier & KEYBOARD_MODIFIER_RIGHTALT) {
         for (i = 0; intlMap.mapAltGr[i].code >= 0; i++) {
             if (intlMap.mapAltGr[i].code == key) {

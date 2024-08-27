@@ -316,7 +316,10 @@ void ps2poll() {
     ps2bufsize -= len;
 }
 
+void cons_printf(const char *__restrict format, ...) ;
+
 void keyboard_key_change(uint8_t key, bool make) {
+    // cons_printf("keyboard_key_change key:0x%02X make:%d\r\n", key, make) ;
     uint8_t mod = 0 ;
     switch (key) {
         case HID_KEY_SHIFT_LEFT:    mod = KEYBOARD_MODIFIER_LEFTSHIFT;  break;
@@ -328,9 +331,9 @@ void keyboard_key_change(uint8_t key, bool make) {
         case HID_KEY_GUI_LEFT:      mod = KEYBOARD_MODIFIER_LEFTGUI;    break;
         case HID_KEY_GUI_RIGHT:     mod = KEYBOARD_MODIFIER_RIGHTGUI;   break;
 
-        // case HID_KEY_NUM_LOCK:      keyboard_toggle_led(PS2_LED_NUM_LOCK); break;
-        // case HID_KEY_SCROLL_LOCK:   keyboard_toggle_led(PS2_LED_SCROLL_LOCK); break;
-        // case HID_KEY_CAPS_LOCK:     keyboard_toggle_led(PS2_LED_CAPS_LOCK); break;
+        case HID_KEY_NUM_LOCK:      if (make) keyboard_toggle_led(PS2_LED_NUM_LOCK); break;
+        case HID_KEY_SCROLL_LOCK:   if (make) keyboard_toggle_led(PS2_LED_SCROLL_LOCK); break;
+        case HID_KEY_CAPS_LOCK:     if (make) keyboard_toggle_led(PS2_LED_CAPS_LOCK); break;
     }
     if (mod != 0) {
         if (make) {
@@ -345,9 +348,10 @@ void keyboard_key_change(uint8_t key, bool make) {
 
 // translate scancode to keycode
 void keyboard_process_byte(uint8_t b) {
-  uint8_t key = HID_KEY_NONE ;
+    // cons_printf("keyboard_process_byte b:0x%02X\r\n", b) ;
+    uint8_t key = HID_KEY_NONE ;
 
-    if (ignoreBytes>0) {
+    if (ignoreBytes > 0) {
         ignoreBytes-- ;
         return ;
     } else if (b == 0xE0) {
@@ -363,7 +367,7 @@ void keyboard_process_byte(uint8_t b) {
         ignoreBytes = 7 ;
         keyboard_key_change(HID_KEY_PAUSE, true) ;
         keyboard_key_change(HID_KEY_PAUSE, false) ;
-    } else if(extkey) {
+    } else if (extkey) {
         switch(b) {
             case 0x11: key = HID_KEY_ALT_RIGHT;     break;
             case 0x14: key = HID_KEY_CONTROL_RIGHT; break;
@@ -392,8 +396,8 @@ void keyboard_process_byte(uint8_t b) {
         keyboard_key_change(key, !breakcode) ;
     }
 
-    if (extkey && b!=0xE0 && b!=0xF0) {
+    if (extkey && b != 0xE0 && b != 0xF0) {
         extkey = false;
     } 
-    breakcode = (b==0xF0) ;
+    breakcode = (b == 0xF0) ;
 }

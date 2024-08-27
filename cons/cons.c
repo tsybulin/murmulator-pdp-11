@@ -4,6 +4,7 @@
 #include "graphics.h"
 #include "ps2.h"
 #include <string.h>
+#include <stdarg.h>
 #include <pico/stdlib.h>
 #include <pico/platform.h>
 
@@ -16,10 +17,7 @@ uint8_t keyboard_map_key_ascii(uint8_t key, uint8_t modifier, bool *isaltcode) ;
 char keyboard_input  ;
 
 void __time_critical_func(handle_ps2)(uint8_t key, uint8_t modifier) {
-        lgprintf(0, 0, 6, 0, "handle_ps2 key: 0x%02X mod: 0x%02X", key, modifier) ;
         uint8_t ascii = keyboard_map_key_ascii(key, modifier, NULL) ;
-        lgprintf(0, 1, 6, 0, "handle_ps2 ascii: 0x%02X", ascii) ;
-
         keyboard_input = ascii ;
 }
 
@@ -89,4 +87,17 @@ void cons_put_char(char c) {
     *t_buf++ = 0 << 4 | 7 & 0xF;
 
     term_pos_col++ ;
+}
+
+void cons_printf(const char *__restrict format, ...) {
+    char tmp[TEXTMODE_COLS + 1] ;
+    va_list args ;
+    va_start(args, format) ;
+    vsnprintf(tmp, TEXTMODE_COLS, format, args) ;
+    
+    char *p = tmp ;
+    for (int xi = TEXTMODE_COLS * 2; xi--;) {
+        if (!*p) break ;
+        cons_put_char(*p++) ;
+    }
 }
