@@ -42,7 +42,7 @@ void KL11::serial_putchar(char c)
 {
 	// while (!uart_is_writable(uart0));
 	// uart_putc(uart0,c);
-	cons_put_char(c) ;
+	cons_put_char_vt100(c) ;
 }
 
 char KL11::serial_getchar()
@@ -135,7 +135,7 @@ void KL11::write16(uint32_t a, uint16_t v)
 	case 0777566:
 		xbuf = v & 0x7f;
 		// serial_putchar(xbuf);
-		cons_put_char(xbuf) ;
+		cons_put_char_vt100(xbuf) ;
 		xbuf |= 0200; // Allow for nulls !!!!
 		xcsr &= ~0x80;
 		iflag = 0;
