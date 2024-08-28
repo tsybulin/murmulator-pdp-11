@@ -41,6 +41,21 @@ void draw_window(const char title[TEXTMODE_COLS + 1], uint32_t x, uint32_t y, ui
     draw_text(line, x + (width - strlen(line)) / 2, y, 14, 3);
 }
 
+void graph_draw_line(const char* title, uint32_t row) {
+    char line[TEXTMODE_COLS + 1] ;
+    memset(line, 0, sizeof line) ;
+
+    memset(line, title ? 0xCD : 0xC4, TEXTMODE_COLS) ; // ═ : ─
+    draw_text(line, 0, row, 7, 0);
+
+    if (!title) {
+        return ;
+    }
+
+    snprintf(line, TEXTMODE_COLS, " %s ", title);
+    draw_text(line, (TEXTMODE_COLS - strlen(line)) / 2, row, 2, 0);
+}
+
 void lgprintf(uint32_t x, uint32_t y, uint8_t color, uint8_t bgcolor, const char *__restrict format, ...) {
     char tmp[TEXTMODE_COLS + 1] ;
     va_list args ;

@@ -24,7 +24,7 @@ semaphore vga_start_semaphore ;
 
 constexpr char BASEDIR[] = "PDP-11" ;
 
-#define frame_tick (16666)
+volatile uint64_t led_offtime = 0 ;
 
 void __time_critical_func(render_core)() {
     multicore_lockout_victim_init();
@@ -36,18 +36,13 @@ void __time_critical_func(render_core)() {
     graphics_set_textbuffer(SCREEN, ATTRS);
     clrScr(0);
 
-    sem_acquire_blocking(&vga_start_semaphore);
-    // 60 FPS loop
-    uint64_t tick = time_us_64();
-    uint64_t last_input_tick = tick;
-    while (true) {
-        // Every 60th frame
-        if (tick >= last_input_tick + frame_tick * 60) {
-            gpio_put(PICO_DEFAULT_LED_PIN, !gpio_get(PICO_DEFAULT_LED_PIN));
-            last_input_tick = tick;
-        }
-        tick = time_us_64();
+    sem_acquire_blocking(&vga_start_semaphore) ;
 
+    while (true) {
+        if (led_offtime > 0 && to_us_since_boot(get_absolute_time()) >= led_offtime) {
+            gpio_put(PICO_DEFAULT_LED_PIN, false) ;
+            led_offtime = 0 ;
+        }
         tight_loop_contents();
     }
 
@@ -63,8 +58,6 @@ int main() {
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
-    gpio_put(PICO_DEFAULT_LED_PIN, true);
-
     sem_init(&vga_start_semaphore, 0, 1);
     multicore_launch_core1(render_core);
     sem_release(&vga_start_semaphore);
@@ -73,8 +66,8 @@ int main() {
 
     cons_init() ;
 
-    cons_draw_line("Murmulator PDP-11", 2) ;
-    cons_draw_line(nullptr, 27) ;
+    graph_draw_line("Murmulator PDP-11", 2) ;
+    graph_draw_line(nullptr, 27) ;
 
     if (FR_OK != f_mount(&fs, "SD", 1)) {
         gprintf("SD Card not inserted or SD Card error!");

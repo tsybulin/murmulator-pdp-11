@@ -7,8 +7,20 @@
 #include <stdarg.h>
 #include <pico/stdlib.h>
 #include <pico/platform.h>
+#include "pico/util/queue.h"
 
-uint8_t cons_buffer[TEXTMODE_COLS * 24] ;
+#define CONS_TOP    3
+#define CONS_BOTTOM 26
+#define CONS_ROWS   24
+// TEXTMODE_COLS * CONS_ROWS
+#define CONS_SIZE   1920
+#define CONS_LAST_ROW 23
+#define CONS_ATTR(fg, bg) (bg << 4 | fg & 0x0F)
+#define BUFFADDR(addr) (TEXTMODE_COLS * (addr))
+#define CONSADDR(addr) (TEXTMODE_COLS * (CONS_TOP + addr))
+#define BUFSIZE(sz) (TEXTMODE_COLS * (sz))
+
+uint8_t cons_buffer[CONS_SIZE] ;
 #define TS_NORMAL      0
 #define TS_WAITBRACKET 1
 #define TS_STARTCHAR   2 
@@ -17,44 +29,79 @@ uint8_t cons_buffer[TEXTMODE_COLS * 24] ;
 #define TS_READCHAR    5
 
 static uint8_t terminal_state = TS_NORMAL ;
-static int cursor_col = 0, cursor_row = 3, saved_col = 0, saved_row = 0;
-static int scroll_region_start = 3, scroll_region_end = 26 ;
+static int cursor_col = 0, cursor_row = 0, saved_col = 0, saved_row = 0;
+static int scroll_region_start = 0, scroll_region_end = CONS_LAST_ROW ;
 static bool cursor_shown = true ;
 static uint8_t color_fg = 7, color_bg = 0, attr = 0 ;
 
 uint8_t keyboard_map_key_ascii(uint8_t key, uint8_t modifier, bool *isaltcode) ;
 
-char keyboard_input  ;
+static queue_t ps2_rx_queue ;
+queue_t keyboard_queue ;
+
+static void cons_send_char(char c) {
+    queue_try_add(&keyboard_queue, &c) ;
+}
+
+static void cons_send_string(const char *str) {
+    while (*str) {
+        queue_try_add(&keyboard_queue, str++) ;
+    }
+}
+
+static void cons_send_escape_sequence(uint8_t key) {
+    cons_send_string("\033[") ;
+    cons_send_char(key) ;
+}
+
+static void cons_process_keyboard_vt(uint8_t key) {
+    switch (key) {
+        case KEY_UP:    cons_send_escape_sequence('A') ; break ;
+        case KEY_DOWN:  cons_send_escape_sequence('B') ; break ;
+        case KEY_RIGHT: cons_send_escape_sequence('C') ; break ;
+        case KEY_LEFT:  cons_send_escape_sequence('D') ; break ;
+
+        case KEY_F1:
+        case KEY_F2:
+        case KEY_F3:
+            cons_send_string("\033O") ;
+            cons_send_char('P' + (key - KEY_F1)) ;
+            break;
+
+        case KEY_F5:
+            cons_send_string("\033Ow") ;
+            break;
+
+        case HID_KEY_RETURN:
+            cons_send_string("\033OM") ;
+            break;
+
+        default:
+            cons_send_char(key) ;
+            break;
+    }
+}
+
+extern uint64_t led_offtime ;
 
 void __time_critical_func(handle_ps2)(uint8_t key, uint8_t modifier) {
-        uint8_t ascii = keyboard_map_key_ascii(key, modifier, NULL) ;
-        keyboard_input = ascii ;
+    gpio_put(PICO_DEFAULT_LED_PIN, true) ;
+    led_offtime = to_us_since_boot(make_timeout_time_ms(50)) ;
+    uint8_t ascii = keyboard_map_key_ascii(key, modifier, NULL) ;
+    cons_process_keyboard_vt(ascii) ;
 }
 
 void cons_cls() {
-    memset(char_buffer + TEXTMODE_COLS * 3, ' ', TEXTMODE_COLS * 24) ;
-    memset(attr_buffer + TEXTMODE_COLS * 3, 0 << 4 | 7 & 0x0F, TEXTMODE_COLS * 24) ;
+    memset(char_buffer + BUFFADDR (CONS_TOP), ' ', CONS_SIZE) ;
+    memset(attr_buffer + BUFFADDR (CONS_TOP), CONS_ATTR(7, 0), CONS_SIZE) ;
 }
 
 void cons_init() {
-    memset(cons_buffer, ' ', TEXTMODE_COLS * 24) ;
+    memset(cons_buffer, ' ', CONS_SIZE) ;
     cons_cls() ;
+    queue_init(&ps2_rx_queue, 1, 32) ;
+    queue_init(&keyboard_queue, 1, 32) ;
     keyboard_init(handle_ps2) ;
-}
-
-void cons_draw_line(const char* title, uint32_t row) {
-    char line[TEXTMODE_COLS + 1] ;
-    memset(line, 0, sizeof line) ;
-
-    memset(line, title ? 0xCD : 0xC4, TEXTMODE_COLS) ; // ═ : ─
-    draw_text(line, 0, row, 7, 0);
-
-    if (!title) {
-        return ;
-    }
-
-    snprintf(line, TEXTMODE_COLS, " %s ", title);
-    draw_text(line, (TEXTMODE_COLS - strlen(line)) / 2, row, 2, 0);
 }
 
 static void cons_scroll_region(uint8_t top_limit, uint8_t bottom_limit, int8_t offset, uint8_t color_fg, uint8_t color_bg) {
@@ -66,29 +113,29 @@ static void cons_scroll_region(uint8_t top_limit, uint8_t bottom_limit, int8_t o
     
     // scroll up
     if (offset > 0) {
-        memcpy(cons_buffer, &char_buffer[TEXTMODE_COLS * (top_limit + offset)], TEXTMODE_COLS * (rows - offset)) ;
-        memcpy(&char_buffer[TEXTMODE_COLS * top_limit], cons_buffer, TEXTMODE_COLS * (rows - offset)) ;
-        memset(&char_buffer[TEXTMODE_COLS * (bottom_limit - offset + 1)], ' ', TEXTMODE_COLS * offset) ;
-        memset(&attr_buffer[TEXTMODE_COLS * (bottom_limit - offset + 1)], color_bg << 4 | color_fg, TEXTMODE_COLS * offset) ;
+        memcpy(cons_buffer, &char_buffer[CONSADDR (top_limit + offset)], BUFSIZE (rows - offset)) ;
+        memcpy(&char_buffer[CONSADDR (top_limit)], cons_buffer, BUFSIZE (rows - offset)) ;
+        memset(&char_buffer[CONSADDR (bottom_limit - offset + 1)], ' ', BUFSIZE (offset)) ;
+        memset(&attr_buffer[CONSADDR (bottom_limit - offset + 1)], CONS_ATTR(color_fg, color_bg), BUFSIZE (offset)) ;
         return ;
     }
 
     // scroll down
 
-    memcpy(cons_buffer, &char_buffer[TEXTMODE_COLS * top_limit], TEXTMODE_COLS * (rows + offset)) ;
-    memcpy(&char_buffer[TEXTMODE_COLS * (top_limit - offset)], cons_buffer, TEXTMODE_COLS * (rows + offset)) ;
-    memset(&char_buffer[TEXTMODE_COLS * top_limit], ' ', TEXTMODE_COLS * -offset) ;
-    memset(&attr_buffer[TEXTMODE_COLS * top_limit], color_bg << 4 | color_fg, TEXTMODE_COLS * -offset) ;
+    memcpy(cons_buffer, &char_buffer[CONSADDR (top_limit)], BUFSIZE (rows + offset)) ;
+    memcpy(&char_buffer[CONSADDR (top_limit - offset)], cons_buffer, BUFSIZE (rows + offset)) ;
+    memset(&char_buffer[CONSADDR (top_limit)], ' ', BUFSIZE (-offset)) ;
+    memset(&attr_buffer[CONSADDR (top_limit)], color_bg << 4 | color_fg, BUFSIZE (-offset)) ;
 }
 
 static uint8_t cons_get_attribute(uint8_t x, uint8_t y, uint8_t attr) {
-    uint8_t* t_buf = attr_buffer + TEXTMODE_COLS * y + x ;
+    uint8_t* a_buf = attr_buffer + CONSADDR (y) + x ;
     if (attr == ATTR_COLOR) {
-        return *t_buf & 0x0F ;
+        return *a_buf & 0x0F ;
     }
 
     if (attr == ATTR_BGCOLOR) {
-        return (*t_buf & 0xF0) >> 4 ;
+        return (*a_buf & 0xF0) >> 4 ;
     }
 
     gprintf("cons_get_attribute: unknown attr 0x%02X", attr) ;
@@ -97,14 +144,14 @@ static uint8_t cons_get_attribute(uint8_t x, uint8_t y, uint8_t attr) {
 }
 
 static void cons_set_attribute(uint8_t x, uint8_t y, uint8_t attr, uint8_t val) {
-    uint8_t* t_buf = attr_buffer + TEXTMODE_COLS * y + x ;
+    uint8_t* a_buf = attr_buffer + CONSADDR (y) + x ;
     if (attr == ATTR_COLOR) {
-        *t_buf = (*t_buf & 0xF0) | val ;
+        *a_buf = (*a_buf & 0xF0) | val ;
         return ;
     }
 
     if (attr == ATTR_BGCOLOR) {
-        *t_buf = (*t_buf & 0x0F) | (val << 4) ;
+        *a_buf = (*a_buf & 0x0F) | (val << 4) ;
         return ;
     }
 
@@ -191,33 +238,74 @@ static void move_cursor_limited(int row, int col) {
 static void init_cursor(int row, int col) {
     cursor_row = -1;
     cursor_col = -1;
-    move_cursor_within_region(row, col, 0, 26) ;
+    move_cursor_within_region(row, col, 0, CONS_LAST_ROW) ;
 }
 
 static void cons_put_char(char c) {
-    int addr = TEXTMODE_COLS * cursor_row + cursor_col ;
+    int addr = CONSADDR (cursor_row) + cursor_col ;
     char_buffer[addr] = c;
-    attr_buffer[addr] = color_bg << 4 | color_fg & 0x0F ;
+    attr_buffer[addr] = CONS_ATTR (color_fg, color_bg) ;
     init_cursor(cursor_row, cursor_col + 1) ;
 }
 
-void cons_printf(const char *__restrict format, ...) {
-    char tmp[TEXTMODE_COLS + 1] ;
-    va_list args ;
-    va_start(args, format) ;
-    vsnprintf(tmp, TEXTMODE_COLS, format, args) ;
-    
-    char *p = tmp ;
-    for (int xi = TEXTMODE_COLS; xi--;) {
-        if (!*p) break ;
-        cons_put_char(*p++) ;
+static void cons_fill_region(uint8_t xs, uint8_t ys, uint8_t xe, uint8_t ye, char c, uint8_t fg, uint8_t bg) {
+    for (uint8_t y = ys; y <= ye; y++) {
+        for (uint8_t x = xs; x <= xe; x++) {
+            int addr = CONSADDR (y) + x ;
+            char_buffer[addr] = c;
+            attr_buffer[addr] =  CONS_ATTR (fg, bg) ;
+        }
+    }
+}
+
+static void cons_insert(uint8_t x, uint8_t y, uint8_t n, uint8_t fg, uint8_t bg) {
+    if (x >= TEXTMODE_COLS || y >= CONS_LAST_ROW) {
+        return ;
+    }
+
+    int addr = CONSADDR (y) + x  + n ;
+
+    for (int i = 0; i < n; i++) {
+        char_buffer[addr] = char_buffer[addr - n] ;
+        attr_buffer[addr] = attr_buffer[addr - n] ;
+        addr-- ;
+    }
+
+    addr = CONSADDR (y) + x ;
+
+    for (int i = 0; i < n; i++) {
+        char_buffer[addr] = ' ' ;
+        attr_buffer[addr] = CONS_ATTR(fg, bg) ;
+        addr++ ;
+    }
+}
+
+static void cons_delete(uint8_t x, uint8_t y, uint8_t n, uint8_t fg, uint8_t bg) {
+    if (x >= TEXTMODE_COLS || y >= CONS_LAST_ROW) {
+        return ;
+    }
+
+    int addr = CONSADDR (y) + x ;
+
+    for (int i = 0; i < n; i++) {
+        char_buffer[addr] = char_buffer[addr + n] ;
+        attr_buffer[addr] = attr_buffer[addr + n] ;
+        addr++ ;
+    }
+
+    addr = CONSADDR (y) + x + n;
+
+    for (int i = 0; i < n; i++) {
+        char_buffer[addr] = ' ' ;
+        attr_buffer[addr] = CONS_ATTR(fg, bg) ;
+        addr-- ;
     }
 }
 
 static void cons_process_text(char c) {
     switch (c) {
         case 5: // ENQ => send answer-back string
-        // send_string("murm-pdp-11") ;
+        cons_send_string("murm-pdp-11") ;
         break;
       
         case 7: // BEL => produce beep
@@ -282,6 +370,272 @@ static void cons_process_text(char c) {
     }
 }
 
+void cons_reset() {
+  saved_col = 0;
+  saved_row = 0;
+  cursor_shown = true;
+  color_fg = 7;
+  color_bg = 0;
+  scroll_region_start = 0;
+  scroll_region_end = CONS_LAST_ROW ;
+//   origin_mode = false;
+//   cursor_eol = false;
+//   auto_wrap_mode = true;
+//   insert_mode = false;
+  attr = 0;
+//   saved_attr = 0;
+}
+
+static void cons_process_command(char start_char, char final_char, uint8_t num_params, uint8_t *params) {
+  // NOTE: num_params>=1 always holds, if no parameters were received then params[0]=0
+    if (final_char == 'l' || final_char == 'h') {
+        bool enabled = final_char == 'h';
+        if (start_char == '?') {
+            switch(params[0]) {
+                case 2:
+                    if (!enabled) {
+                        cons_reset();
+                    }
+                    break ;
+
+                case 3: // switch 80/132 columm mode - 132 columns not supported but we can clear the screen
+                    cons_cls() ;
+                    break ;
+
+                case 4: // enable smooth scrolling (emulated via scroll delay)
+                    //framebuf_set_scroll_delay(enabled ? config_get_terminal_scrolldelay() : 0);
+                    break;
+              
+                case 5: // invert screen
+                    // framebuf_set_screen_inverted(enabled);
+                    break;
+          
+                case 6: // origin mode
+                    // origin_mode = enabled; 
+                    move_cursor_limited(scroll_region_start, 0); 
+                    break;
+              
+                case 7: // auto-wrap mode
+                    // auto_wrap_mode = enabled; 
+                    break;
+
+                case 12: // local echo (send-receive mode)
+                    // localecho = !enabled;
+                    break;
+              
+                case 25: // show/hide cursor
+                    cursor_shown = enabled;
+                    cons_show_cursor(cursor_shown);
+                    break;
+            }
+        } else if (start_char == 0) {
+            switch (params[0]) {
+                case 4: // insert mode
+                    // insert_mode = enabled;
+                    break;
+            }
+        }
+    } else if (final_char == 'J') {
+        switch (params[0]) {
+            case 0:
+                // for (int i = cursor_row; i < 27; i++) framebuf_set_row_attr(i, 0);
+                cons_fill_region(cursor_col, cursor_row, TEXTMODE_COLS - 1, CONS_LAST_ROW, ' ', color_fg, color_bg);
+                break;
+          
+            case 1:
+                // for(int i=0; i<cursor_row; i++) framebuf_set_row_attr(i, 0);
+                cons_fill_region(0, 0, cursor_col, cursor_row, ' ', color_fg, color_bg);
+                break;
+          
+            case 2:
+                // for(int i=0; i<framebuf_get_nrows(); i++) framebuf_set_row_attr(i, 0);
+                cons_fill_region(0, 0, TEXTMODE_COLS - 1, CONS_LAST_ROW, ' ', color_fg, color_bg);
+                break;
+        }
+
+        // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
+        cons_show_cursor(cursor_shown);
+    } else if (final_char == 'K') {
+        switch (params[0]) {
+            case 0:
+                cons_fill_region(cursor_col, cursor_row, TEXTMODE_COLS - 1, CONS_LAST_ROW, ' ', color_fg, color_bg);
+                break;
+          
+            case 1:
+                cons_fill_region(0, cursor_row, cursor_col, cursor_row, ' ', color_fg, color_bg);
+                break;
+          
+            case 2:
+                cons_fill_region(0, cursor_row, TEXTMODE_COLS - 1, cursor_row, ' ', color_fg, color_bg);
+                break;
+        }
+
+        // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
+        cons_show_cursor(cursor_shown);
+    } else if (final_char == 'A') {
+        move_cursor_limited(cursor_row - MAX(1, params[0]), cursor_col);
+    } else if (final_char == 'B') {
+        move_cursor_limited(cursor_row + MAX(1, params[0]), cursor_col);
+    } else if (final_char == 'C' || final_char == 'a') {
+        move_cursor_limited(cursor_row, cursor_col + MAX(1, params[0]));
+    } else if (final_char == 'D' || final_char == 'j') {
+        move_cursor_limited(cursor_row, cursor_col - MAX(1, params[0]));
+    } else if (final_char == 'E' || final_char == 'e') {
+        move_cursor_limited(cursor_row + MAX(1, params[0]), 0);
+    } else if (final_char == 'F' || final_char == 'k') {
+        move_cursor_limited(cursor_row - MAX(1, params[0]), 0);
+    } else if (final_char == 'd') {
+        move_cursor_limited(MAX(1, params[0]), cursor_col);
+    } else if (final_char == 'G' || final_char == '`') {
+        move_cursor_limited(cursor_row, MAX(1, params[0])-1);
+    } else if (final_char == 'H' || final_char=='f') {
+        int top_limit    = scroll_region_start ;
+        int bottom_limit = scroll_region_end ;
+        move_cursor_within_region(top_limit + MAX(params[0],1) - 1, num_params < 2 ? 0 : MAX(params[1],1) - 1, top_limit, bottom_limit);
+    } else if (final_char == 'I') {
+        int n = MAX(1, params[0]);
+        int col = cursor_col + 1;
+        while (n > 0 && col < TEXTMODE_COLS - 1) {
+                while (col < TEXTMODE_COLS - 1) {
+                    col++;
+                }
+                n--;
+        }
+        move_cursor_limited(cursor_row, col); 
+    } else if (final_char == 'Z') {
+        int n = MAX(1, params[0]);
+        int col = cursor_col-1;
+        while (n > 0 && col > 0) {
+            while (col > 0) {
+                col--;
+            }
+            n--;
+        }
+        move_cursor_limited(cursor_row, col); 
+    } else if (final_char == 'L' || final_char == 'M') {
+        int n = MAX(1, params[0]);
+        int bottom_limit = scroll_region_end ;
+        cons_show_cursor(false);
+        cons_scroll_region(cursor_row, bottom_limit, final_char == 'M' ? n : -n, color_fg, color_bg);
+        // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
+        cons_show_cursor(cursor_shown);
+    } else if (final_char=='@') {
+        int n = MAX(1, params[0]);
+        cons_show_cursor(false);
+        cons_insert(cursor_col, cursor_row, n, color_fg, color_bg);
+        // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
+        cons_show_cursor(cursor_shown);
+    } else if (final_char == 'P') {
+        int n = MAX(1, params[0]);
+        cons_delete(cursor_col, cursor_row, n, color_fg, color_bg);
+        // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
+        cons_show_cursor(cursor_shown);
+    } else if (final_char == 'S' || final_char == 'T') {
+        int top_limit    = scroll_region_start;
+        int bottom_limit = scroll_region_end;
+        int n = MAX(1, params[0]);
+        cons_show_cursor(false);
+        while (n--) {
+            cons_scroll_region(top_limit, bottom_limit, final_char == 'S' ? n : -n, color_fg, color_bg);
+        }
+        // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
+        cons_show_cursor(cursor_shown);
+    } else if (final_char == 'g') {
+        int p = params[0];
+        if (p==0) {
+            // tabs[cursor_col] = false;
+        } else if (p == 3) {
+            // memset(tabs, 0, TEXTMODE_COLS) ;
+        }
+    } else if (final_char == 'm') {
+        unsigned int i;
+        for (i = 0; i < num_params; i++) {
+            int p = params[i] ;
+            if (p == 0) {
+                color_fg = 7;
+                color_bg = 0;
+                attr     = 0 ;
+                cursor_shown = true;
+                cons_show_cursor(cursor_shown);
+            } else if (p == 1) {
+                // attr |= ATTR_BOLD;
+            // }
+            // else if( p==4 )
+            //     attr |= ATTR_UNDERLINE;
+            // else if( p==5 )
+            //     attr |= ATTR_BLINK;
+            // else if( p==7 )
+            //     attr |= ATTR_INVERSE;
+            // else if( p==22 )
+            //     attr &= ~ATTR_BOLD;
+            // else if( p==24 )
+            //     attr &= ~ATTR_UNDERLINE;
+            // else if( p==25 )
+            //     attr &= ~ATTR_BLINK;
+            // else if( p==27 )
+            //     attr &= ~ATTR_INVERSE;
+            } else if (p >= 30 && p <= 37) {
+                color_fg = p - 30;
+            } else if (p == 38 && num_params >= i + 2 && params[i+1] == 5) {
+                color_fg = params[i + 2] & 0x0F;
+                i += 2;
+            } else if (p == 39) {
+                color_fg = 7;
+            } else if (p >= 40 && p <= 47) {
+                color_bg = p - 40 ;
+            } else if (p == 48 && num_params >= i + 2 && params[i + 1] == 5) {
+                color_bg = params[i+2] & 0x0F;
+                i+=2;
+            } else if (p == 49) {
+                color_bg = 0;
+            }
+
+            cons_show_cursor(cursor_shown);
+        }
+    } else if (final_char == 'r') {
+        if (num_params == 2 && params[1] > params[0]) {
+            scroll_region_start = MAX(params[0], 1)-1;
+            scroll_region_end   = MIN(params[1], CONS_LAST_ROW) ;
+        } else if (params[0] == 0) {
+            scroll_region_start = 0;
+            scroll_region_end   = CONS_LAST_ROW;
+        }
+
+        move_cursor_within_region(scroll_region_start, 0, scroll_region_start, scroll_region_end);
+    } else if (final_char == 's') {
+        saved_row = cursor_row;
+        saved_col = cursor_col;
+        //   saved_eol = cursor_eol;
+        //   saved_origin_mode = origin_mode;
+        //   saved_fg  = color_fg;
+        //   saved_bg  = color_bg;
+        //   saved_attr = attr;
+        //   saved_charset_G0 = charset_G0;
+        //   saved_charset_G1 = charset_G1;
+    } else if (final_char == 'u') {
+        move_cursor_limited(saved_row, saved_col);
+        // origin_mode = saved_origin_mode;      
+        // cursor_eol = saved_eol;
+        // color_fg = saved_fg;
+        // color_bg = saved_bg;
+        // attr = saved_attr;
+        // charset_G0 = saved_charset_G0;
+        // charset_G1 = saved_charset_G1;
+    } else if (final_char == 'c') {
+        cons_send_string("\033[?6c");
+    } else if (final_char == 'n') {
+        if (params[0] == 5) {
+          // terminal status report
+          cons_send_string("\033[0n");
+        } else if (params[0] == 6) {
+          // cursor position report
+            int top_limit = scroll_region_start ;
+            char buf[20];
+            snprintf(buf, 20, "\033[%u;%uR", cursor_row-top_limit+1, cursor_col+1);
+            cons_send_string(buf);
+        }
+    }
+}
 
 void cons_put_char_vt100(char c) {
     static char    start_char = 0 ;
@@ -304,7 +658,7 @@ void cons_put_char_vt100(char c) {
 
     switch (terminal_state) {
         case TS_NORMAL: {
-            if (c == 27) {
+            if (c == 0x1B) {
                 terminal_state = TS_WAITBRACKET ;
             } else {
                 cons_process_text(c) ;
@@ -328,13 +682,15 @@ void cons_put_char_vt100(char c) {
                     terminal_state = TS_HASH;
                     break;
             
-                case  27: cons_put_char(c); break;                           // escaped ESC
-                // case 'c': terminal_reset(); break;                           // reset
-                // case '7': terminal_process_command(0, 's', 0, NULL); break;  // save cursor position
-                // case '8': terminal_process_command(0, 'u', 0, NULL); break;  // restore cursor position
-                // case 'H': tabs[cursor_col] = true; break;                    // set tab
-                // case 'J': terminal_process_command(0, 'J', 0, NULL); break;  // clear to end of screen
-                // case 'K': terminal_process_command(0, 'K', 0, NULL); break;  // clear to end of row
+                case 0x1B: cons_put_char(c); break;                           // escaped ESC
+                case 'c': cons_reset(); break;                           // reset
+                case '7': cons_process_command(0, 's', 0, NULL); break;  // save cursor position
+                case '8': cons_process_command(0, 'u', 0, NULL); break;  // restore cursor position
+                case 'H':                                                // set tab
+                    // tabs[cursor_col] = true;
+                    break;
+                case 'J': cons_process_command(0, 'J', 0, NULL); break;  // clear to end of screen
+                case 'K': cons_process_command(0, 'K', 0, NULL); break;  // clear to end of row
                 case 'D': move_cursor_wrap(cursor_row+1, cursor_col); break; // cursor down
                 case 'E': move_cursor_wrap(cursor_row+1, 0); break;          // cursor down and to first column
                 case 'I': move_cursor_wrap(cursor_row-1, 0); break;          // cursor up and to furst column
@@ -370,8 +726,7 @@ void cons_put_char_vt100(char c) {
             terminal_state = TS_READPARAM;
         } else {
             // not a parameter value or startchar => command is done
-            
-            // terminal_process_command(start_char, c, num_params, params);
+            cons_process_command(start_char, c, num_params, params);
             terminal_state = TS_NORMAL;
         }
         
@@ -405,7 +760,7 @@ void cons_put_char_vt100(char c) {
                 int top_limit    = scroll_region_start ;
                 int bottom_limit = scroll_region_end ;
                 cons_show_cursor(false);
-                // framebuf_fill_region(0, top_limit, framebuf_get_ncols(-1)-1, bottom_limit, 'E', color_fg, color_bg);
+                cons_fill_region(0, top_limit, TEXTMODE_COLS - 1, bottom_limit, 'E', color_fg, color_bg);
                 // cur_attr = framebuf_get_attr(cursor_col, cursor_row);
                 cons_show_cursor(true);
                 break;
@@ -426,5 +781,18 @@ void cons_put_char_vt100(char c) {
         terminal_state = TS_NORMAL;
         break;
       }
+    }
+}
+
+void cons_printf(const char *__restrict format, ...) {
+    char tmp[TEXTMODE_COLS + 1] ;
+    va_list args ;
+    va_start(args, format) ;
+    vsnprintf(tmp, TEXTMODE_COLS, format, args) ;
+    
+    char *p = tmp ;
+    for (int xi = TEXTMODE_COLS; xi--;) {
+        if (!*p) break ;
+        cons_put_char_vt100(*p++) ;
     }
 }

@@ -13,12 +13,13 @@ extern "C" {
 
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "pico/util/queue.h"
 
 extern KB11 cpu;
 
 bool keypressed = false;
 
-extern char keyboard_input ;
+extern queue_t keyboard_queue ;
 
 KL11::KL11()
 {
@@ -33,23 +34,23 @@ void KL11::clearterminal()
 	count = 0;
 }
 
-static int _kbhit()
-{
-	return keyboard_input != '\0' ;
+static int _kbhit() {
+	return !queue_is_empty(&keyboard_queue) ;
 }
 
-void KL11::serial_putchar(char c)
-{
+void KL11::serial_putchar(char c) {
 	// while (!uart_is_writable(uart0));
 	// uart_putc(uart0,c);
 	cons_put_char_vt100(c) ;
 }
 
-char KL11::serial_getchar()
-{
-	char c = keyboard_input ;
-	keyboard_input = '\0' ;
-	return c ;
+char KL11::serial_getchar() {
+	char c ;
+	if (queue_try_remove(&keyboard_queue, &c)) {
+		return c ;
+	}
+	
+	return '\0' ;
 }
 
 void KL11::poll()
@@ -134,7 +135,6 @@ void KL11::write16(uint32_t a, uint16_t v)
 		break;
 	case 0777566:
 		xbuf = v & 0x7f;
-		// serial_putchar(xbuf);
 		cons_put_char_vt100(xbuf) ;
 		xbuf |= 0200; // Allow for nulls !!!!
 		xcsr &= ~0x80;
