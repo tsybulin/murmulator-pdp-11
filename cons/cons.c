@@ -30,11 +30,16 @@ uint8_t cons_buffer[CONS_SIZE] ;
 
 #define COLOR_FG 6
 
+// charset
+#define CS_TEXT     0
+#define CS_GRAPHICS 2
+
 static uint8_t terminal_state = TS_NORMAL ;
 static int cursor_col = 0, cursor_row = 0, saved_col = 0, saved_row = 0;
 static int scroll_region_start = 0, scroll_region_end = CONS_LAST_ROW ;
 static bool cursor_shown = true ;
 static uint8_t color_fg = COLOR_FG, color_bg = 0, attr = 0 ;
+static uint8_t saved_attr, saved_fg, saved_bg, saved_charset_G0, saved_charset_G1, *charset, charset_G0, charset_G1 ;
 
 uint8_t keyboard_map_key_ascii(uint8_t key, uint8_t modifier, bool *isaltcode) ;
 
@@ -104,6 +109,12 @@ void cons_init() {
     queue_init(&ps2_rx_queue, 1, 32) ;
     queue_init(&keyboard_queue, 1, 32) ;
     keyboard_init(handle_ps2) ;
+
+    charset_G0 = CS_TEXT;
+    charset_G1 = CS_GRAPHICS;
+    saved_charset_G0 = CS_TEXT;
+    saved_charset_G1 = CS_GRAPHICS;
+    charset = &charset_G0;
 }
 
 static void cons_scroll_region(uint8_t top_limit, uint8_t bottom_limit, int8_t offset, uint8_t color_fg, uint8_t color_bg) {
@@ -243,9 +254,51 @@ static void init_cursor(int row, int col) {
     move_cursor_within_region(row, col, 0, CONS_LAST_ROW) ;
 }
 
+static const uint8_t graphics_char_mapping[31] = {
+    0x04, // diamond/caret
+    0xB1, // scatter
+    0x0B, // HT
+    0x0C, // FF
+    0x0D, // CR
+    0x0E, // LF
+    0xF8, // degree symbol
+    0xF1, // plusminus
+    0x0F, // NL
+    0x10, // VT
+    0xD9, // left-top corner
+    0xBF, // left-bottom corner
+    0xDA, // right-bottom corner
+    0xC0, // right-top corner
+    0xC5, // cross
+    0x11, // horizontal line 1
+    0x12, // horizontal line 2
+    0xC4, // horizontal line 3
+    0x13, // horizontal line 4
+    0x5F, // horizontal line 5
+    0xC3, // right "T"
+    0xB4, // left "T"
+    0xC1, // top "T"
+    0xC2, // bottom "T"
+    0xB3, // vertical line
+    0xF3, // less-equal
+    0xF2, // greater-equal
+    0xE3, // pi
+    0x1C, // not equal
+    0x9C, // pound sterling
+    0xFA  // center dot
+} ;
+
+static uint8_t map_graphics(uint8_t c) {
+    if (c < 0x60 || c > 0x7E) {
+        return c ;
+    }
+
+    return graphics_char_mapping[c - 0x60] ;
+}
+
 static void cons_put_char(char c) {
     int addr = CONSADDR (cursor_row) + cursor_col ;
-    char_buffer[addr] = c;
+    char_buffer[addr] = *charset ? map_graphics(c) : c ;
     attr_buffer[addr] = CONS_ATTR (color_fg, color_bg) ;
     init_cursor(cursor_row, cursor_col + 1) ;
 }
@@ -316,7 +369,7 @@ static void cons_process_text(char c) {
         //                   config_get_audible_bell_volume(), 
         //                   false);
         //   framebuf_flash_screen(config_get_visual_bell_color(), config_get_visual_bell_duration());
-            graphics_set_flashmode(false, true) ;
+            // graphics_set_flashmode(false, true) ;
             break ;
       
         case 0x08:   // backspace
@@ -357,11 +410,11 @@ static void cons_process_text(char c) {
         break ;
 
     case 0x0E:  // SO
-      //charset = &charset_G1; 
+        charset = &charset_G1; 
         break;
 
     case 0x0F:  // SI
-      //charset = &charset_G0; 
+        charset = &charset_G0; 
         break;
 
     default: // regular character
@@ -373,19 +426,20 @@ static void cons_process_text(char c) {
 }
 
 void cons_reset() {
-  saved_col = 0;
-  saved_row = 0;
-  cursor_shown = true;
-  color_fg = COLOR_FG;
-  color_bg = 0;
-  scroll_region_start = 0;
-  scroll_region_end = CONS_LAST_ROW ;
-//   origin_mode = false;
-//   cursor_eol = false;
-//   auto_wrap_mode = true;
-//   insert_mode = false;
-  attr = 0;
-//   saved_attr = 0;
+    saved_col = 0;
+    saved_row = 0;
+    cursor_shown = true;
+    color_fg = COLOR_FG;
+    color_bg = 0;
+    scroll_region_start = 0;
+    scroll_region_end = CONS_LAST_ROW ;
+    attr = 0;
+    saved_attr = 0;
+    charset_G0 = CS_TEXT;
+    charset_G1 = CS_GRAPHICS;
+    saved_charset_G0 = CS_TEXT;
+    saved_charset_G1 = CS_GRAPHICS;
+    charset = &charset_G0;
 }
 
 static void cons_process_command(char start_char, char final_char, uint8_t num_params, uint8_t *params) {
@@ -609,20 +663,20 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
         saved_col = cursor_col;
         //   saved_eol = cursor_eol;
         //   saved_origin_mode = origin_mode;
-        //   saved_fg  = color_fg;
-        //   saved_bg  = color_bg;
-        //   saved_attr = attr;
-        //   saved_charset_G0 = charset_G0;
-        //   saved_charset_G1 = charset_G1;
+          saved_fg  = color_fg;
+          saved_bg  = color_bg;
+          saved_attr = attr;
+          saved_charset_G0 = charset_G0;
+          saved_charset_G1 = charset_G1;
     } else if (final_char == 'u') {
         move_cursor_limited(saved_row, saved_col);
         // origin_mode = saved_origin_mode;      
         // cursor_eol = saved_eol;
-        // color_fg = saved_fg;
-        // color_bg = saved_bg;
-        // attr = saved_attr;
-        // charset_G0 = saved_charset_G0;
-        // charset_G1 = saved_charset_G1;
+        color_fg = saved_fg;
+        color_bg = saved_bg;
+        attr = saved_attr;
+        charset_G0 = saved_charset_G0;
+        charset_G1 = saved_charset_G1;
     } else if (final_char == 'c') {
         cons_send_string("\033[?6c");
     } else if (final_char == 'n') {
@@ -637,6 +691,18 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
             cons_send_string(buf);
         }
     }
+}
+
+static uint8_t get_charset(char c) {
+    switch (c) {
+        case 'A' : return CS_TEXT;
+        case 'B' : return CS_TEXT;
+        case '0' : return CS_GRAPHICS;
+        case '1' : return CS_TEXT;
+        case '2' : return CS_GRAPHICS;
+    }
+
+    return CS_TEXT;
 }
 
 void cons_put_char_vt100(char c) {
@@ -775,9 +841,9 @@ void cons_put_char_vt100(char c) {
 
     case TS_READCHAR: {
         if (start_char=='(') {
-            // charset_G0 = get_charset(c);
+            charset_G0 = get_charset(c);
         } else if (start_char==')') {
-            // charset_G1 = get_charset(c);
+            charset_G1 = get_charset(c);
         }
 
         terminal_state = TS_NORMAL;
