@@ -110,28 +110,26 @@ void setup( char *rkfile, char *rlfile, int bootdev)
         cpu.reset(0200,0);
         //cpu.print=true;           // Uncomment to start continuous print of cpu steps
         if (binload(rkfile))
-            gprintf("Load fail\r\n");
+            gprintf("Load fail");
         else
-            gprintf("Loaded tape:%s\r\n",rkfile);
+            gprintf("Loaded tape:%s",rkfile);
         return;
     }
 	if (cpu.unibus.rk11.rk05.obj.lockid)
 		return;
 	FRESULT fr = f_open(&cpu.unibus.rl11.rl02,rlfile, FA_READ | FA_WRITE);
 	if (FR_OK != fr && FR_EXIST != fr) {
-		gprintf("f_open(%s) error: %s (%d)\n", rlfile, FRESULT_str(fr), fr);
+		gprintf("f_open(%s) error: %s (%d)", rlfile, FRESULT_str(fr), fr);
 		while (1) ;
 	}
     fr = f_open(&cpu.unibus.rk11.rk05, rkfile, FA_READ | FA_WRITE);
 	if (FR_OK != fr && FR_EXIST != fr) {
-		gprintf("f_open(%s) error: %s (%d)\n", rkfile, FRESULT_str(fr), fr);
+		gprintf("f_open(%s) error: %s (%d)", rkfile, FRESULT_str(fr), fr);
 		while (1) ;
 	}
     clkdiv = (uint64_t)1000000 / (uint64_t)60;
     systime = time_us_64();
 	cpu.reset(02002,bootdev);
-    // gprintf("Ready\n");
-    
 }
 
 jmp_buf trapbuf;

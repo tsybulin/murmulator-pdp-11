@@ -5,7 +5,7 @@ project(murm-pdp C CXX ASM)
 pico_sdk_init()
 
 option(VGA "Enable VGA" ON)
-set(APP_VERSION 11.05)
+set(APP_VERSION 11.06)
 
 SET(BUILD_NAME "${PROJECT_NAME}-${APP_VERSION}")
 
