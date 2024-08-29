@@ -12,6 +12,8 @@
 #include "pico/stdlib.h"
 #include "stdlib.h"
 
+#include "font8x16.h"
+
 uint16_t pio_program_VGA_instructions[] = {
     //     .wrap_target
     0x6008, //  0: out    pins, 8

@@ -34,6 +34,11 @@ uint8_t cons_buffer[CONS_SIZE] ;
 #define CS_TEXT     0
 #define CS_GRAPHICS 2
 
+#define ATTR_UNDERLINE 0x01
+#define ATTR_BLINK     0x02
+#define ATTR_BOLD      0x04
+#define ATTR_INVERSE   0x08
+
 static uint8_t terminal_state = TS_NORMAL ;
 static int cursor_col = 0, cursor_row = 0, saved_col = 0, saved_row = 0;
 static int scroll_region_start = 0, scroll_region_end = CONS_LAST_ROW ;
@@ -172,7 +177,10 @@ static void cons_set_attribute(uint8_t x, uint8_t y, uint8_t attr, uint8_t val) 
 }
 
 static void cons_show_cursor(bool show) {
-    cons_set_attribute(cursor_col, cursor_row, ATTR_BGCOLOR, show ? COLOR_FG : 0) ;
+    uint8_t* a_buf = attr_buffer + CONSADDR (cursor_row) + cursor_col ;
+    uint8_t fg = show ? color_bg : color_fg ;
+    uint8_t bg = show ? color_fg : color_bg ;
+    *a_buf = CONS_ATTR(fg, bg) ;
     cursor_shown = show ;
 }
 
@@ -299,7 +307,19 @@ static uint8_t map_graphics(uint8_t c) {
 static void cons_put_char(char c) {
     int addr = CONSADDR (cursor_row) + cursor_col ;
     char_buffer[addr] = *charset ? map_graphics(c) : c ;
-    attr_buffer[addr] = CONS_ATTR (color_fg, color_bg) ;
+    uint8_t fg = (attr & ATTR_INVERSE) ? color_bg : color_fg ;
+    uint8_t bg = (attr & ATTR_INVERSE) ? color_fg : color_bg ;
+
+    if (attr & ATTR_BOLD) {
+        fg += 8 ;
+    }
+
+    if (attr & ATTR_UNDERLINE) {
+        bg = 5 ;
+    }
+
+    attr_buffer[addr] = CONS_ATTR (fg, bg) ;
+    
     init_cursor(cursor_row, cursor_col + 1) ;
 }
 
@@ -614,22 +634,21 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
                 cursor_shown = true;
                 cons_show_cursor(cursor_shown);
             } else if (p == 1) {
-                // attr |= ATTR_BOLD;
-            // }
-            // else if( p==4 )
-            //     attr |= ATTR_UNDERLINE;
-            // else if( p==5 )
-            //     attr |= ATTR_BLINK;
-            // else if( p==7 )
-            //     attr |= ATTR_INVERSE;
-            // else if( p==22 )
-            //     attr &= ~ATTR_BOLD;
-            // else if( p==24 )
-            //     attr &= ~ATTR_UNDERLINE;
-            // else if( p==25 )
-            //     attr &= ~ATTR_BLINK;
-            // else if( p==27 )
-            //     attr &= ~ATTR_INVERSE;
+                attr |= ATTR_BOLD;
+            } else if (p == 4) {
+                attr |= ATTR_UNDERLINE;
+            } else if (p == 5) {
+                attr |= ATTR_BLINK;
+            } else if (p == 7) {
+                attr |= ATTR_INVERSE;
+            } else if (p == 22) {
+                attr &= ~ATTR_BOLD;
+            } else if( p==24 ) {
+                attr &= ~ATTR_UNDERLINE;
+            } else if(p == 25) {
+                attr &= ~ATTR_BLINK;
+            } else if(p == 27) {
+                attr &= ~ATTR_INVERSE;
             } else if (p >= 30 && p <= 37) {
                 color_fg = p - 30;
             } else if (p == 38 && num_params >= i + 2 && params[i+1] == 5) {
