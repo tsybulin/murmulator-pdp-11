@@ -28,11 +28,13 @@ uint8_t cons_buffer[CONS_SIZE] ;
 #define TS_HASH        4
 #define TS_READCHAR    5
 
+#define COLOR_FG 6
+
 static uint8_t terminal_state = TS_NORMAL ;
 static int cursor_col = 0, cursor_row = 0, saved_col = 0, saved_row = 0;
 static int scroll_region_start = 0, scroll_region_end = CONS_LAST_ROW ;
 static bool cursor_shown = true ;
-static uint8_t color_fg = 7, color_bg = 0, attr = 0 ;
+static uint8_t color_fg = COLOR_FG, color_bg = 0, attr = 0 ;
 
 uint8_t keyboard_map_key_ascii(uint8_t key, uint8_t modifier, bool *isaltcode) ;
 
@@ -93,7 +95,7 @@ void __time_critical_func(handle_ps2)(uint8_t key, uint8_t modifier) {
 
 void cons_cls() {
     memset(char_buffer + BUFFADDR (CONS_TOP), ' ', CONS_SIZE) ;
-    memset(attr_buffer + BUFFADDR (CONS_TOP), CONS_ATTR(7, 0), CONS_SIZE) ;
+    memset(attr_buffer + BUFFADDR (CONS_TOP), CONS_ATTR(color_fg, color_bg), CONS_SIZE) ;
 }
 
 void cons_init() {
@@ -159,7 +161,7 @@ static void cons_set_attribute(uint8_t x, uint8_t y, uint8_t attr, uint8_t val) 
 }
 
 static void cons_show_cursor(bool show) {
-    cons_set_attribute(cursor_col, cursor_row, ATTR_BGCOLOR, show ? 7 : 0) ;
+    cons_set_attribute(cursor_col, cursor_row, ATTR_BGCOLOR, show ? COLOR_FG : 0) ;
     cursor_shown = show ;
 }
 
@@ -317,8 +319,8 @@ static void cons_process_text(char c) {
             graphics_set_flashmode(false, true) ;
             break ;
       
-        case 8:   // backspace
-        case 127: { // delete
+        case 0x08:   // backspace
+        case 0x7F: { // delete
             uint8_t mode = c == 8 ? 1 : 2 ;
             if (mode > 0) {
                 int top_limit = scroll_region_start ;
@@ -346,19 +348,19 @@ static void cons_process_text(char c) {
       }
       
     case '\n': // newline
-    case 11:   // vertical tab (interpreted as newline)
+    case 0x0B:   // vertical tab (interpreted as newline)
         move_cursor_wrap(cursor_row + 1, cursor_col) ;
         break ;
-    case 12:   // form feed (interpreted as newline)
+    case 0x0C:   // form feed (interpreted as newline)
     case '\r': // carriage return
         move_cursor_wrap(cursor_row, 0) ;
         break ;
 
-    case 14:  // SO
+    case 0x0E:  // SO
       //charset = &charset_G1; 
         break;
 
-    case 15:  // SI
+    case 0x0F:  // SI
       //charset = &charset_G0; 
         break;
 
@@ -374,7 +376,7 @@ void cons_reset() {
   saved_col = 0;
   saved_row = 0;
   cursor_shown = true;
-  color_fg = 7;
+  color_fg = COLOR_FG;
   color_bg = 0;
   scroll_region_start = 0;
   scroll_region_end = CONS_LAST_ROW ;
@@ -552,7 +554,7 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
         for (i = 0; i < num_params; i++) {
             int p = params[i] ;
             if (p == 0) {
-                color_fg = 7;
+                color_fg = COLOR_FG;
                 color_bg = 0;
                 attr     = 0 ;
                 cursor_shown = true;
@@ -580,7 +582,7 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
                 color_fg = params[i + 2] & 0x0F;
                 i += 2;
             } else if (p == 39) {
-                color_fg = 7;
+                color_fg = COLOR_FG;
             } else if (p >= 40 && p <= 47) {
                 color_bg = p - 40 ;
             } else if (p == 48 && num_params >= i + 2 && params[i + 1] == 5) {
