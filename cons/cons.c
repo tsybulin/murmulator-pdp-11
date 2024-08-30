@@ -42,7 +42,7 @@ uint8_t cons_buffer[CONS_SIZE] ;
 static uint8_t terminal_state = TS_NORMAL ;
 static int cursor_col = 0, cursor_row = 0, saved_col = 0, saved_row = 0;
 static int scroll_region_start = 0, scroll_region_end = CONS_LAST_ROW ;
-static bool cursor_shown = true ;
+static bool cursor_shown = true, cursor_eol = false, saved_eol = false ;
 static uint8_t color_fg = COLOR_FG, color_bg = 0, attr = 0 ;
 static uint8_t saved_attr, saved_fg, saved_bg, saved_charset_G0, saved_charset_G1, *charset, charset_G0, charset_G1 ;
 
@@ -216,6 +216,7 @@ static void move_cursor_wrap(int row, int col) {
 
     cursor_row = row ;
     cursor_col = col ;
+    cursor_eol = false ;
     
     cons_show_cursor(true) ;
 }
@@ -244,6 +245,7 @@ static void move_cursor_within_region(int row, int col, int top_limit, int botto
           
     cursor_row = row ;
     cursor_col = col ;
+    cursor_eol = false ;
 
     cons_show_cursor(true) ;
 }
@@ -305,6 +307,11 @@ static uint8_t map_graphics(uint8_t c) {
 }
 
 static void cons_put_char(char c) {
+    if (cursor_eol) {
+        move_cursor_wrap(cursor_row + 1, 0) ;
+        cursor_eol = false ;
+    }
+
     int addr = CONSADDR (cursor_row) + cursor_col ;
     char_buffer[addr] = *charset ? map_graphics(c) : c ;
     uint8_t fg = (attr & ATTR_INVERSE) ? color_bg : color_fg ;
@@ -320,7 +327,13 @@ static void cons_put_char(char c) {
 
     attr_buffer[addr] = CONS_ATTR (fg, bg) ;
     
-    init_cursor(cursor_row, cursor_col + 1) ;
+    if (cursor_col == TEXTMODE_COLS - 1) {
+        // cursor stays in last column but will wrap if another character is typed
+        cons_show_cursor(cursor_shown);
+        cursor_eol = true ;
+    } else {
+        init_cursor(cursor_row, cursor_col + 1) ;
+    }
 }
 
 static void cons_fill_region(uint8_t xs, uint8_t ys, uint8_t xe, uint8_t ye, char c, uint8_t fg, uint8_t bg) {
@@ -454,6 +467,7 @@ void cons_reset() {
     scroll_region_start = 0;
     scroll_region_end = CONS_LAST_ROW ;
     attr = 0;
+    cursor_eol = false ;
     saved_attr = 0;
     charset_G0 = CS_TEXT;
     charset_G1 = CS_GRAPHICS;
@@ -680,7 +694,7 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
     } else if (final_char == 's') {
         saved_row = cursor_row;
         saved_col = cursor_col;
-        //   saved_eol = cursor_eol;
+        saved_eol = cursor_eol;
         //   saved_origin_mode = origin_mode;
           saved_fg  = color_fg;
           saved_bg  = color_bg;
@@ -690,7 +704,7 @@ static void cons_process_command(char start_char, char final_char, uint8_t num_p
     } else if (final_char == 'u') {
         move_cursor_limited(saved_row, saved_col);
         // origin_mode = saved_origin_mode;      
-        // cursor_eol = saved_eol;
+        cursor_eol = saved_eol;
         color_fg = saved_fg;
         color_bg = saved_bg;
         attr = saved_attr;

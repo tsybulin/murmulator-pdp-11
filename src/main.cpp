@@ -170,6 +170,9 @@ int main() {
                 } else if (c == '4') {
                     ci = 4 ;
                     break ;
+                } else if (c == '\n' || c == '\r') {
+                    ci = 0 ;
+                    break;
                 }
             }
         }

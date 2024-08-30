@@ -41,20 +41,11 @@ char DL11::serial_getchar()
 }
 
 void DL11::poll() {
-	// gprintf("DL11: poll rcsr 0x%02X xcsr 0x%02X", rcsr, xcsr) ;
 	if (!rcvrdone()) {
 		// unit not busy
 		if (true)
 			if (_kbhit() || keypressed) {
 				char ch = serial_getchar();
-				// gprintf("DL11: poll rcsr: 0x%02X xcsr: 0x%02X ch: 0x%02X", rcsr, xcsr, ch) ;
-				// serial_putchar('Z') ;
-				// serial_putchar('h') ;
-				// serial_putchar('o') ;
-				// serial_putchar('p') ;
-				// serial_putchar('A') ;
-				// serial_putchar('\r') ;
-				// serial_putchar('\n') ;
 				count = 0;
 				if (true) {
 					rbuf = ch & 0x7f;

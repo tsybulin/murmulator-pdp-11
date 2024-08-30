@@ -39,8 +39,6 @@ static int _kbhit() {
 }
 
 void KL11::serial_putchar(char c) {
-	// while (!uart_is_writable(uart0));
-	// uart_putc(uart0,c);
 	cons_put_char_vt100(c) ;
 }
 
