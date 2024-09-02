@@ -8,6 +8,7 @@
 #include <pico/stdlib.h>
 #include <pico/platform.h>
 #include "pico/util/queue.h"
+#include "hardware/watchdog.h"
 
 #define CONS_TOP    3
 #define CONS_BOTTOM 26
@@ -97,6 +98,10 @@ static void cons_process_keyboard_vt(uint8_t key) {
 extern uint64_t led_offtime ;
 
 void __time_critical_func(handle_ps2)(uint8_t key, uint8_t modifier) {
+    if (modifier & KEYBOARD_MODIFIER_LEFTALT && modifier & KEYBOARD_MODIFIER_LEFTCTRL && key == HID_KEY_DELETE) {
+        watchdog_enable(10, false) ;
+        while(1) ;
+    }
     gpio_put(PICO_DEFAULT_LED_PIN, true) ;
     led_offtime = to_us_since_boot(make_timeout_time_ms(50)) ;
     uint8_t ascii = keyboard_map_key_ascii(key, modifier, NULL) ;

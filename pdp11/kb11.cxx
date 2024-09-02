@@ -1,9 +1,8 @@
 #include <cstdlib>
-//#include <sched.h>
 #include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
-//#include <unistd.h>
+#include <pico/stdlib.h>
 
 #include "bootrom.h"
 #include "kb11.h"

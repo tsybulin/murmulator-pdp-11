@@ -171,8 +171,7 @@ void loop0() {
     }
 }
 
-int startup(char *rkfile, char *rlfile, int bootdev)
-{
+int startup(char *rkfile, char *rlfile, int bootdev) {
     setup(rkfile,rlfile,bootdev);
     while (1)
         loop();

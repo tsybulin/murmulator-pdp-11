@@ -2,7 +2,6 @@
 #include <cstring>
 #include <hardware/clocks.h>
 #include <hardware/structs/vreg_and_chip_reset.h>
-#include <hardware/watchdog.h>
 #include <pico/bootrom.h>
 #include <pico/multicore.h>
 #include <pico/stdlib.h>
@@ -83,7 +82,7 @@ constexpr char BASEDIR[] = "PDP-11" ;
 volatile uint64_t led_offtime = 0 ;
 extern queue_t keyboard_queue ;
 
-void __time_critical_func(render_core)() {
+void render_core() {
     multicore_lockout_victim_init();
     graphics_init();
     graphics_set_bgcolor(0x000000);
