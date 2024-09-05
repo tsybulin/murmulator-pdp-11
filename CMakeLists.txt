@@ -5,7 +5,7 @@ project(murm-pdp C CXX ASM)
 pico_sdk_init()
 
 option(VGA "Enable VGA" ON)
-set(APP_VERSION 11.06)
+set(APP_VERSION 11.07)
 
 SET(BUILD_NAME "${PROJECT_NAME}-${APP_VERSION}")
 
@@ -72,7 +72,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE VGA)
 target_link_libraries(${PROJECT_NAME} PRIVATE vga)
-SET(BUILD_NAME "${BUILD_NAME}-VGA")
+# SET(BUILD_NAME "${BUILD_NAME}")
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${BUILD_NAME}")
 
