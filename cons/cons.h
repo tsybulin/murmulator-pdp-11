@@ -1,6 +1,10 @@
 #ifndef _CONS_H_
 #define _CONS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "stdint.h"
 
 // key values for control keys in ASCII range
@@ -43,5 +47,9 @@ void cons_cls() ;
 void cons_put_char_vt100(char c) ;
 
 void cons_printf(const char *__restrict format, ...) ;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

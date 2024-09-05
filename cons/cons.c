@@ -98,7 +98,11 @@ static void cons_process_keyboard_vt(uint8_t key) {
 extern uint64_t led_offtime ;
 
 void __time_critical_func(handle_ps2)(uint8_t key, uint8_t modifier) {
-    if (modifier & KEYBOARD_MODIFIER_LEFTALT && modifier & KEYBOARD_MODIFIER_LEFTCTRL && key == HID_KEY_DELETE) {
+    if (
+        modifier & (KEYBOARD_MODIFIER_LEFTALT | KEYBOARD_MODIFIER_RIGHTALT) &&
+        modifier & (KEYBOARD_MODIFIER_LEFTCTRL | KEYBOARD_MODIFIER_RIGHTCTRL) &&
+        key == HID_KEY_DELETE
+    ) {
         watchdog_enable(10, false) ;
         while(1) ;
     }

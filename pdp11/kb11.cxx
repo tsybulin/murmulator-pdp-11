@@ -7,6 +7,7 @@
 #include "bootrom.h"
 #include "kb11.h"
 #include "graphics.h"
+#include "cons.h"
 
 /*
             ***** Update 1/3/2023 ISS *****
@@ -463,7 +464,7 @@ void KB11::step() {
                     if (currentmode()) {
                         trap(010);
                     }
-                    gprintf("HALT: DR: %06o\n", displayregister);
+                    cons_printf("HALT: DR: %06o\r\n", displayregister);
                     printstate();
                     getchar();
                     return;
@@ -874,34 +875,23 @@ void KB11::trapat(uint16_t vec) {
 
 void KB11::printstate() {
     ptstate();
-    return;
-
-
-    gprintf("R0 %06o R1 %06o R2 %06o R3 %06o R4 %06o R5 %06o R6 %06o R7 "
-           "%06o\r\n",
-           R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7]);
-    gprintf("[%s%s%s%s%s%s", previousmode() ? "u" : "k",
-           currentmode() ? "U" : "K", N() ? "N" : " ", Z() ? "Z" : " ",
-           V() ? "V" : " ", C() ? "C" : " ");
-    gprintf("]  instr %06o: %06o\t ", PC, read16(PC));
-    disasm(PC);
-    gprintf(" PSW:%06o\n",PSW);
 }
 
 void KB11::ptstate() {
-    gprintf("R0 %06o R1 %06o R2 %06o R3 %06o R4 %06o R5 %06o R6 %06o R7 %06o\r\n",
-        uint16_t(R[0]), uint16_t(R[1]), uint16_t(R[2]), uint16_t(R[3]), uint16_t(R[4]), uint16_t(R[5]), uint16_t(R[6]), uint16_t(R[7]));
-    gprintf("[%s%s%s%s%s%s",
+    cons_printf("    R0 %06o R1 %06o R2 %06o R3 %06o\r\n", uint16_t(R[0]), uint16_t(R[1]), uint16_t(R[2]), uint16_t(R[3]));
+    cons_printf("    R4 %06o R5 %06o R6 %06o R7 %06o\r\n",
+        uint16_t(R[4]), uint16_t(R[5]), uint16_t(R[6]), uint16_t(R[7]));
+    cons_printf("    PSW [%s%s%s%s%s%s",
         PSW & 0140000 ? "U" : "K",
         PSW & 0030000 ? "U" : "K",
-        N() ? "N" : " ",
-        Z() ? "Z" : " ",
-        V() ? "V" : " ",
-        C() ? "C" : " ");
-    gprintf("]  instr %06o: %06o\t ", PC, read16(PC));
+        N() ? "N" : "-",
+        Z() ? "Z" : "-",
+        V() ? "V" : "-",
+        C() ? "C" : "-");
+    cons_printf("]\r\ninstr %06o: %06o     ", PC, read16(PC));
 
     disasm(PC);
 
-    gprintf("  PS:%o\n", PSW);
+    cons_printf("\r\n    PS:%o\r\n", PSW);
 }
 

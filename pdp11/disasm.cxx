@@ -5,7 +5,7 @@
 #include "avr11.h"
 #include "kb11.h"
 #include "unibus.h"
-#include "graphics.h"
+#include "cons.h"
 
 extern KB11 cpu;
 
@@ -95,48 +95,48 @@ void disasmaddr(uint16_t m, uint32_t a) {
         switch (m) {
         case 027:
             a += 2;
-            gprintf("$%06o", cpu.unibus.read16(a));
+            cons_printf("$%06o", cpu.unibus.read16(a));
             return;
         case 037:
             a += 2;
-            gprintf("*%06o", cpu.unibus.read16(a));
+            cons_printf("*%06o", cpu.unibus.read16(a));
             return;
         case 067:
             a += 2;
-            gprintf("*%06o", (a + 2 + (cpu.unibus.read16(a))) & 0xFFFF);
+            cons_printf("*%06o", (a + 2 + (cpu.unibus.read16(a))) & 0xFFFF);
             return;
         case 077:
-            gprintf("**%06o", (a + 2 + (cpu.unibus.read16(a))) & 0xFFFF);
+            cons_printf("**%06o", (a + 2 + (cpu.unibus.read16(a))) & 0xFFFF);
             return;
         }
     }
 
     switch (m & 070) {
     case 000:
-        gprintf("%s", rs[m & 7]);
+        cons_printf("%s", rs[m & 7]);
         break;
     case 010:
-        gprintf("(%s)", rs[m & 7]);
+        cons_printf("(%s)", rs[m & 7]);
         break;
     case 020:
-        gprintf("(%s)+", rs[m & 7]);
+        cons_printf("(%s)+", rs[m & 7]);
         break;
     case 030:
-        gprintf("*(%s)+", rs[m & 7]);
+        cons_printf("*(%s)+", rs[m & 7]);
         break;
     case 040:
-        gprintf("-(%s)", rs[m & 7]);
+        cons_printf("-(%s)", rs[m & 7]);
         break;
     case 050:
-        gprintf("*-(%s)", rs[m & 7]);
+        cons_printf("*-(%s)", rs[m & 7]);
         break;
     case 060:
         a += 2;
-        gprintf("%06o (%s)", cpu.unibus.read16(a), rs[m & 7]);
+        cons_printf("%06o (%s)", cpu.unibus.read16(a), rs[m & 7]);
         break;
     case 070:
         a += 2;
-        gprintf("*%06o (%s)", cpu.unibus.read16(a), rs[m & 7]);
+        cons_printf("*%06o (%s)", cpu.unibus.read16(a), rs[m & 7]);
         break;
     }
 }
@@ -152,43 +152,43 @@ void disasm(uint32_t a) {
         }
     }
     if (l.ins == 0) {
-        gprintf("???");
+        cons_printf("???");
         return;
     }
 
-    gprintf("%s", l.msg);
+    cons_printf("%s", l.msg);
     if (l.b && (ins & 0100000)) {
-        gprintf("B");
+        cons_printf("B");
     }
     const auto s = (ins & 07700) >> 6;
     const auto d = ins & 077;
     auto o = ins & 0377;
     switch (l.flag) {
     case S | DD:
-        gprintf(" ");
+        cons_printf(" ");
         disasmaddr(s, a);
-        gprintf(",");
+        cons_printf(",");
         [[fallthrough]];
     case DD:
-        gprintf(" ");
+        cons_printf(" ");
         disasmaddr(d, a);
         break;
     case RR | O:
-        gprintf(" %s,", rs[(ins & 0700) >> 6]);
+        cons_printf(" %s,", rs[(ins & 0700) >> 6]);
         o &= 077;
         [[fallthrough]];
     case O:
         if (o & 0x80) {
-            gprintf(" -%03o", (2 * ((0xFF ^ o) + 1)));
+            cons_printf(" -%03o", (2 * ((0xFF ^ o) + 1)));
         } else {
-            gprintf(" +%03o", (2 * o));
+            cons_printf(" +%03o", (2 * o));
         };
         break;
     case RR | DD:
-        gprintf(" %s, ", rs[(ins & 0700) >> 6]);
+        cons_printf(" %s, ", rs[(ins & 0700) >> 6]);
         disasmaddr(d, a);
         [[fallthrough]];
     case RR:
-        gprintf(" %s", rs[ins & 7]);
+        cons_printf(" %s", rs[ins & 7]);
     }
 }
