@@ -256,8 +256,6 @@ static void move_cursor_within_region(int row, int col, int top_limit, int botto
 }
 
 static void move_cursor_limited(int row, int col) {
-  // only move if cursor is currently within scroll region, do not move
-  // outside of scroll region
     if (cursor_row >= scroll_region_start && cursor_row <= scroll_region_end) {
         move_cursor_within_region(row, col, scroll_region_start, scroll_region_end) ;
     }
@@ -342,12 +340,9 @@ static void cons_put_char(char c) {
 }
 
 static void cons_fill_region(uint8_t xs, uint8_t ys, uint8_t xe, uint8_t ye, char c, uint8_t fg, uint8_t bg) {
-    for (uint8_t y = ys; y <= ye; y++) {
-        for (uint8_t x = xs; x <= xe; x++) {
-            int addr = CONSADDR (y) + x ;
-            char_buffer[addr] = c;
-            attr_buffer[addr] =  CONS_ATTR (fg, bg) ;
-        }
+    for (int addr = CONSADDR(ys) + xs; addr <= CONSADDR(ye) + xe; addr++) {
+        char_buffer[addr] = c;
+        attr_buffer[addr] =  CONS_ATTR (fg, bg) ;
     }
 }
 
